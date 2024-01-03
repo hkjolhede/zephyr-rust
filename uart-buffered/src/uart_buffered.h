@@ -217,7 +217,7 @@ static inline void uart_buffered_tx_init(struct uart_buffered_tx *fifo,
 }
 
 static inline void uart_buffered_init(struct uart_buffered *buffered, struct device *uart,
-				      void (*irq_handler)(struct device *uart))
+				      void (*irq_handler)(const struct device *uart, void *user_data))
 {
 	uint8_t c;
 
