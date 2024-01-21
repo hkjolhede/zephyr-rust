@@ -142,7 +142,7 @@ if (CONFIG_RUST)
             "CONFIG_RUST_ALLOC_POOL=${CONFIG_RUST_ALLOC_POOL}"
             "CONFIG_RUST_MUTEX_POOL=${CONFIG_RUST_MUTEX_POOL}"
             "CONFIG_POSIX_CLOCK=${CONFIG_POSIX_CLOCK}"
-            "TARGET_CFLAGS=${external_project_cflags} --target=${clang_target}"
+            "CLANG_FLAGS=${external_project_cflags} --target=${clang_target}"
             "SYSROOT=${rust_sysroot}"
             "SYSROOT_BUILD=${rust_sysroot_build}"
             "APP_BUILD=${rust_app_build}"
