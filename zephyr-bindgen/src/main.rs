@@ -28,7 +28,7 @@ impl ParseCallbacks for Callbacks {
 }
 
 fn main() {
-    let flags = env::var("TARGET_CFLAGS").unwrap_or("".to_string());
+    let flags = env::var("CLANG_FLAGS").unwrap_or("".to_string());
     eprintln!("cflags: {}", flags);
     let userspace = env::var("CONFIG_USERSPACE").expect("CONFIG_USERSPACE must be set") == "y";
     eprintln!("userspace: {}", userspace);
