@@ -1,0 +1,21 @@
+{
+    "name": "nrf-connect-rust",
+    "image": "ghcr.io/hkjolhede/nrf-connect-rust:main",
+    "workspaceMount": "source=${localWorkspaceFolder},target=/project,type=bind,consistency=cached",
+    "workspaceFolder": "/project",
+    "mounts": ["type=bind,source=/dev/bus/usb,target=/dev/bus/usb"],
+    "privileged": true,
+    "containerEnv": {
+        "ZEPHYR_EXTRA_MODULES": "/project"
+    },
+    "features": {
+    },
+    "customizations": {
+            "vscode": {
+                    "extensions": [
+                            "nordic-semiconductor.nrf-connect",
+                            "rust-lang.rust-analyzer"
+                    ]
+            }
+    }
+}
