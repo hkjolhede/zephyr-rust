@@ -1,10 +1,11 @@
 {
     "name": "nrf-connect-rust",
-    "image": "ghcr.io/hkjolhede/nrf-connect-rust:main",
+    // "image": "nrf-connect-rust:latest",
+    "build": { "dockerfile": "../ci/Dockerfile.nrfconnect" },
     "workspaceMount": "source=${localWorkspaceFolder},target=/project,type=bind,consistency=cached",
     "workspaceFolder": "/project",
-    "mounts": ["type=bind,source=/dev/bus/usb,target=/dev/bus/usb"],
-    "privileged": true,
+//     "mounts": ["type=bind,source=/dev/bus/usb,target=/dev/bus/usb"],
+//     "privileged": true,
     "containerEnv": {
         "ZEPHYR_EXTRA_MODULES": "/project"
     },

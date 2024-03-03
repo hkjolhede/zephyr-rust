@@ -1,0 +1,153 @@
+FROM mcr.microsoft.com/vscode/devcontainers/base:ubuntu-22.04 as base
+# FROM ubuntu:22.04 as base
+
+ARG sdk_nrf_branch=v2.5-branch
+ARG toolchain_version=v2.5.2
+ARG sdk_nrf_commit
+ARG NORDIC_COMMAND_LINE_TOOLS_VERSION="10-23-2/nrf-command-line-tools-10.23.2"
+ARG arch=amd64
+ARG RUST_VERSION=1.68.0
+ARG ZEPHYR_RUST=/workdir/zephyr-rust
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+USER vscode
+
+WORKDIR /workdir
+VOLUME [ "/project" ]
+
+SHELL [ "/bin/bash", "-euxo", "pipefail", "-c" ]
+
+RUN <<EOT
+    sudo apt-get -y update
+    sudo apt-get -y upgrade
+    sudo apt-get -y install --no-install-recommends wget unzip
+
+    echo "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy main" | sudo tee /etc/apt/sources.list.d/llvm.list
+    echo "deb-src http://apt.llvm.org/jammy/ llvm-toolchain-jammy main" sudo tee -a /etc/apt/sources.list.d/llvm.list
+    wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+
+    sudo apt-get -y update
+    sudo apt-get -y install --no-install-recommends gcc-multilib make clang-format llvm-dev libclang-dev 
+    wget -qO- https://raw.githubusercontent.com/nrfconnect/sdk-nrf/${sdk_nrf_branch}/.clang-format > /workdir/.clang-format
+EOT
+
+# Install toolchain
+# Make nrfutil install in a shared location, because when used with GitHub
+# Actions, the image will be launched with the home dir mounted from the local
+# checkout.
+
+# ENV NRFUTIL_HOME=/usr/local/share/nrfutil
+RUN <<EOT
+    wget -q https://developer.nordicsemi.com/.pc-tools/nrfutil/x64-linux/nrfutil
+    sudo mv nrfutil /usr/local/bin
+    sudo chmod +x /usr/local/bin/nrfutil
+    nrfutil install toolchain-manager
+    nrfutil install toolchain-manager search
+    nrfutil toolchain-manager install --ncs-version ${toolchain_version}
+    nrfutil toolchain-manager list
+EOT
+
+#
+# Clang
+#
+# RUN <<EOT
+#     echo "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-18 main" > /etc/apt/sources.list.d/llvm.list
+#     echo "deb-src http://apt.llvm.org/jammy/ llvm-toolchain-jammy-18 main" >> /etc/apt/sources.list.d/llvm.list
+#     wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+#     apt-get -y update
+#     apt-get -y install clang-format llvm-18-dev libclang-18-dev clang-18
+#     wget -qO- https://raw.githubusercontent.com/nrfconnect/sdk-nrf/${sdk_nrf_branch}/.clang-format > /workdir/.clang-format
+# EOT
+
+
+# Nordic command line tools
+# Releases: https://www.nordicsemi.com/Products/Development-tools/nrf-command-line-tools/download
+RUN <<EOT
+    NCLT_BASE=https://nsscprodmedia.blob.core.windows.net/prod/software-and-other-downloads/desktop-software/nrf-command-line-tools/sw/versions-10-x-x
+    echo "Host architecture: $arch"
+    case $arch in
+        "amd64")
+            NCLT_URL="${NCLT_BASE}/${NORDIC_COMMAND_LINE_TOOLS_VERSION}_linux-amd64.tar.gz"
+            ;;
+        "arm64")
+            NCLT_URL="${NCLT_BASE}/${NORDIC_COMMAND_LINE_TOOLS_VERSION}_linux-arm64.tar.gz"
+            ;;
+    esac
+    echo "NCLT_URL=${NCLT_URL}"
+    if [ ! -z "$NCLT_URL" ]; then
+        mkdir tmp && cd tmp
+        wget -qO - "${NCLT_URL}" | tar --no-same-owner -xz
+        # Install included JLink
+        sudo mkdir /opt/SEGGER
+        sudo tar xzf JLink_*.tgz -C /opt/SEGGER
+        sudo mv /opt/SEGGER/JLink* /opt/SEGGER/JLink
+        # Install nrf-command-line-tools
+        sudo cp -r ./nrf-command-line-tools /opt
+        sudo ln -s /opt/nrf-command-line-tools/bin/nrfjprog /usr/local/bin/nrfjprog
+        sudo ln -s /opt/nrf-command-line-tools/bin/mergehex /usr/local/bin/mergehex
+        cd .. && rm -rf tmp ;
+    else
+        echo "Skipping nRF Command Line Tools (not available for $arch)" ;
+    fi
+EOT
+
+
+# Prepare image with a ready to use build environment
+SHELL ["nrfutil","toolchain-manager","launch","/bin/bash","--","-c"]
+
+ENV ZEPHYR_BASE=/workdir/zephyr
+
+RUN <<EOT
+    west init -m https://github.com/nrfconnect/sdk-nrf --mr ${sdk_nrf_branch} .
+    if [[ $sdk_nrf_commit =~ "^[a-fA-F0-9]{32}$" ]]; then
+        git checkout ${sdk_nrf_commit};
+    fi
+    west update --narrow -o=--depth=1
+    west zephyr-export
+EOT
+
+RUN <<EOT
+    wget -O - https://sh.rustup.rs | sh -s -- --default-toolchain=${RUST_VERSION} -y -t thumbv7em-none-eabihf -t thumbv7em-none-eabi
+EOT
+
+ENV ZEPHYR_EXTRA_MODULES=${ZEPHYR_RUST}
+
+COPY <<EOT ~/.cargo/config.toml
+[net]
+git-fetch-with-cli=true
+retry=10
+
+[patch.crates-io]
+zephyr = { path = "${ZEPHYR_RUST}/rust/zephyr" }
+zephyr-macros = { path = "${ZEPHYR_RUST}/rust/zephyr-macros" }
+zephyr-logger = { path = "${ZEPHYR_RUST}/rust/zephyr-logger" }
+EOT
+
+
+RUN <<EOT
+    git config --global http.postBuffer 1048576000  
+    git config --global https.postBuffer 1048576000
+    git clone --recurse-submodules https://github.com/hkjolhede/zephyr-rust.git --single-branch -b cc-usage
+    . ~/.cargo/env
+    cd ${ZEPHYR_RUST}/rust
+    for x in zephyr*; do
+        cd $x && cargo fetch && cd ..
+    done
+    cd ${ZEPHYR_RUST}/zephyr-bindgen
+    cargo fetch
+EOT
+
+WORKDIR /project
+
+COPY --chmod=555 <<EOT /entry.sh
+#!/bin/bash
+
+exec \$@
+EOT
+
+# Launch into build environment with the passed arguments
+# Currently this is not supported in GitHub Actions
+# See https://github.com/actions/runner/issues/1964
+ENTRYPOINT [ "nrfutil", "toolchain-manager", "launch", "/bin/bash", "--", "/entry.sh" ]
+# COPY ./entry.sh /root/entry.sh

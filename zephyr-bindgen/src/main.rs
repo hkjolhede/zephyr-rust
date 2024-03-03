@@ -47,7 +47,7 @@ fn main() {
         // XXX: doesn't handle args with spaces in quotes
         .clang_args(flags.split(" "))
         // Fixes includes for NRF Connect SDK
-        .clang_arg("-I/root/ncs/toolchains/7795df4459/opt/zephyr-sdk/x86_64-zephyr-elf/picolibc/include/")
+        .clang_arg(format!("-I{}/x86_64-zephyr-elf/picolibc/include/", env::var("ZEPHYR_SDK_INSTALL_DIR").unwrap()))
         .opaque_type("z_x86_thread_stack_header")
         // Finish the builder and generate the bindings.
         .generate()
